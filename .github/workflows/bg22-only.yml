@@ -1,0 +1,64 @@
+name: BG22 only
+
+# Fork-local: builds just the EFR32BG22 firmware (same steps as build.yml's efr32 job).
+
+on:
+  push:
+    branches: ['el058-*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  efr32:
+    name: efr32bg22-slc
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    env:
+      SLT_VERSION: 1.2.1
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: recursive }
+
+      - name: Resolve version
+        run: echo "OD_FW_VERSION=$(tools/release/version.sh '')" >> "$GITHUB_ENV"
+
+      - name: Restore Silicon Labs tools
+        id: slt-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.silabs
+            ~/slt
+          key: slt-${{ env.SLT_VERSION }}-sisdk-2025.12.2-gcc-12.2.rel1
+
+      - name: Install SLT and the Simplicity SDK
+        if: steps.slt-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/slt
+          curl -fsSL -o /tmp/slt.zip \
+            "https://www.silabs.com/documents/public/software/slt-cli-${SLT_VERSION}-linux-x64.zip"
+          unzip -o /tmp/slt.zip -d ~/slt/pkg
+          mkdir -p ~/slt/bin
+          ln -sf "$(find ~/slt/pkg -type f -name slt | head -1)" ~/slt/bin/slt
+          chmod +x ~/slt/bin/slt
+          ~/slt/bin/slt --non-interactive install \
+            simplicity-sdk/2025.12.2 gcc-arm-none-eabi/12.2.rel1 ninja cmake commander
+
+      - name: Headless build
+        run: |
+          export PATH="$HOME/slt/bin:$PATH"
+          slt where simplicity-sdk
+          targets/efr32bg22-slc/build-and-flash.sh --clean --no-flash
+
+      - name: Collect release assets
+        run: python3 tools/release/collect.py fragment --target efr32bg22-slc release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-silabs
+          path: release/
+          if-no-files-found: error
