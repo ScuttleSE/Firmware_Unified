@@ -48,6 +48,8 @@ struct XferAppHardwareState {
   od_color_geometry_t geometry;
   uint32_t plane_size;
   uint8_t current_plane;
+  /* IMAGE_SLICE the stream is in, for single-plane frames split across markers. */
+  uint8_t current_slice;
   bool panel_up;
   /* Multi-pass drive state, all zero on the ordinary 0x0070 path. `frame_bytes` is 0 for a
    * single-pass transfer, which is what makes the pass-advance check below inert there. */
@@ -834,12 +836,12 @@ static bool xfer_app_write_full(uint32_t stream_offset, od_span_t data)
       const uint32_t slice = frame / od_epd_shim_image_of();
       const uint32_t in_frame = logical % frame;
       const uint8_t part = (uint8_t)(in_frame / slice);
-      if (part != s_xfer_app.current_plane) {
-        if (in_frame != (uint32_t)part * slice || part != s_xfer_app.current_plane + 1u
+      if (part != s_xfer_app.current_slice) {
+        if (in_frame != (uint32_t)part * slice || part != s_xfer_app.current_slice + 1u
             || !od_epd_shim_next_plane()) {
           return false;
         }
-        s_xfer_app.current_plane = part;
+        s_xfer_app.current_slice = part;
       }
       const uint32_t slice_end = logical - in_frame + (uint32_t)(part + 1u) * slice;
       if (chunk > slice_end - logical) {
@@ -874,6 +876,7 @@ static bool xfer_app_write_full(uint32_t stream_offset, od_span_t data)
       }
       s_xfer_app.drive_pass++;
       s_xfer_app.current_plane = 0u;
+      s_xfer_app.current_slice = 0u;
       /* The rail stays up across passes. The 16-colour behaviour was characterised with power
        * held for all three, and a drop between them would re-run the panel's power-on reset. */
       if (!od_epd_shim_begin_pass(s_xfer_app.drive_pass)) {
