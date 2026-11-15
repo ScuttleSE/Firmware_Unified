@@ -24,7 +24,7 @@ jobs:
         with: { submodules: recursive }
 
       - name: Resolve version
-        run: echo "OD_FW_VERSION=$(tools/release/version.sh '')" >> "$GITHUB_ENV"
+        run: echo "OD_FW_VERSION=$(tools/release/version.sh 3.0.200)" >> "$GITHUB_ENV"
 
       - name: Restore Silicon Labs tools
         id: slt-cache
